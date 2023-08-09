@@ -1,7 +1,19 @@
 import { IInputs, IOutputs } from "./generated/ManifestTypes";
 import * as XLSX from 'xlsx';   // npm install --save xlsx
+import { saveAs } from 'file-saver';  // npm install --save file-saver
+
+
 
 export class JsonToExcel implements ComponentFramework.StandardControl<IInputs, IOutputs> {
+
+    /**
+     * Variables
+     */
+    private _notifyOutputChanged: () => void;
+    private _fileName: string;
+    private _json: string;
+    private _sortOrder: string;
+    private _trigger: boolean;
 
     /**
      * Empty constructor.
@@ -20,6 +32,7 @@ export class JsonToExcel implements ComponentFramework.StandardControl<IInputs, 
      */
     public init(context: ComponentFramework.Context<IInputs>, notifyOutputChanged: () => void, state: ComponentFramework.Dictionary, container: HTMLDivElement): void {
         // Add control initialization code
+        this._notifyOutputChanged = notifyOutputChanged;
     }
 
 
@@ -29,6 +42,19 @@ export class JsonToExcel implements ComponentFramework.StandardControl<IInputs, 
      */
     public updateView(context: ComponentFramework.Context<IInputs>): void {
         // Add code to update control view
+
+        this._fileName = context.parameters.fileName.raw ?? "";
+
+        this._json = context.parameters.JSONContent.raw ?? "";
+
+        this._sortOrder = context.parameters.sortOrder.raw ?? "";
+
+        this._trigger = context.parameters.trigger.raw ?? false;
+
+        if (this._trigger) {
+            this.downloadExcel();
+            this._notifyOutputChanged();
+        }
     }
 
     /**
@@ -36,7 +62,9 @@ export class JsonToExcel implements ComponentFramework.StandardControl<IInputs, 
      * @returns an object based on nomenclature defined in manifest, expecting object[s] for property marked as “bound” or “output”
      */
     public getOutputs(): IOutputs {
-        return {};
+        return {
+            trigger: false
+        };
     }
 
     /**
@@ -46,4 +74,32 @@ export class JsonToExcel implements ComponentFramework.StandardControl<IInputs, 
     public destroy(): void {
         // Add code to cleanup control if necessary
     }
+
+    private downloadExcel() {
+        //convert json to array
+        let data = JSON.parse(this._json);
+        let sortOrder = JSON.parse(this._sortOrder)
+        //new workbook
+        let wb = XLSX.utils.book_new();
+        //new worksheet
+        let ws = XLSX.utils.json_to_sheet(data, { header: sortOrder });
+        //add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        //adjust column width
+        const columnWidths = sortOrder.map((column: string) => ({
+            wch: Math.max(column.length, ...data.map((row: any) => String(row[column]).length))
+        }));
+        ws['!cols'] = columnWidths;
+        //save workbook
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+        saveAs(blob, `${this._fileName}.xlsx`);
+
+        // const workbook: XLSX.WorkBook = { Sheets: { 'data': ws }, SheetNames: ['data'] };
+        // XLSX.writeFile(workbook, this.filename);
+
+    }
+
 }
